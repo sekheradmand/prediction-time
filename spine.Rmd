@@ -1,0 +1,176 @@
+---
+title: "spine"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library( dplyr )     # To load "dplyr" package 
+library( ggplot2 )   # To load "ggplot2" package
+library( liver )
+library( GGally )
+library( pROC )
+library( psych )
+library( rpart )  
+library(randomForest)
+library(e1071)
+library(neuralnet)
+library(fitdistrplus)
+library(nnet)
+library(caret)
+```
+
+## R Markdown
+
+
+
+```{r }
+Sys.setlocale(locale = "persian")
+x<-read.csv("D:\\3\\datamining\\surgery time\\sepration\\New folder\\backbone&pelvic.csv", header = TRUE,fileEncoding = "UTF-8")#"UCS-2LE")
+#View(x)
+y<-x
+y$gender<-factor(x$gender.numeric)
+y$data.classs<-factor(x$data.class.numeric)
+
+y$surgeon<-factor(x$surgeon.class)
+y$k.anesthesia<-factor(x$k.anesthesia.class)
+y$asistant<-factor(x$asistant.class)
+y$anesthesia<-factor(x$anesthesia.class)
+y$k.s<-factor(x$K.surgery.class)
+
+y$anesthesia.time<-(x$anesthesia.time)
+y$surgery.code<-factor(x$class.surgery.code)
+mean(x$anesthesia.time)
+max(x$anesthesia.time)
+
+str(y)
+```
+
+
+
+```{r cars}
+set.seed(123)
+part_data = partition( data = y, prob = c( 0.8, 0.2) )
+
+train_set = part_data $ part1
+test_set =part_data $ part2
+actual_test  = test_set $anesthesia.time 
+ml_all = lm( anesthesia.time~ gender +surgeon+k.anesthesia+age+ k.s+surgery.code, data = train_set)
+summary( ml_all )
+plot(ml_all )
+ml_predict=predict(ml_all,test_set)
+RMSE(ml_predict,actual_test)
+mse(ml_predict,actual_test)
+mean(ml_predict)
+max(ml_predict)
+#//////////////////////////////////////////////////////////////////////////////
+ml_step = step( ml_all, direction = "both" )
+#/////////////////////////////////////////////////
+summary( ml_step )
+plot(ml_predict, actual_test,main="femur surgery",
+     xlab = "Predicted Values",
+     ylab = "Observed Values")
+abline(a = 0, b = 1, lwd=2,
+       col = "blue")
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r }
+library(Metrics)
+set.seed(123)
+part_data = partition( data = y, prob = c( 0.8, 0.2) )
+```
+
+
+```{r }
+actual_test  = test_set $anesthesia.time 
+#Regression with SVM
+train_set = part_data $ part1
+test_set =part_data $ part2
+#////////////////////////////////////////////////////////////////////
+fitreg<-rpart(anesthesia.time ~gender +data.classs +surgeon+k.anesthesia+ anesthesia+age+ k.s+surgery.code ,method="anova",data=train_set)
+pre_rpart=predict(fitreg,test_set)
+RMSE(pre_rpart,actual_test)
+printcp(fitreg)
+#rmse(fitreg)
+plotcp(fitreg)
+par(mfrow=c(1,2))
+rsq.rpart(fitreg)
+
+pfitreg<- prune(fitreg, cp=fitreg$cptable[which.min(fitreg$cptable [,"xerror"]) ,"CP"]) # from cptable   
+plot(pfitreg, uniform=TRUE,main="Pruned Regression Tree for anesthesia.time")
+text(pfitreg, use.n=TRUE, all=TRUE,cex=.7)
+RMSE(pre_rpart,actual_test)
+mse(pre_rpart,actual_test)
+#/set.seed(7)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r }
+set.seed(123)
+part_data = partition( data = y, prob = c( 0.8, 0.2) )
+
+actual_test  = test_set $anesthesia.time 
+#Regression with SVM
+train_set = part_data $ part1
+test_set =part_data $ part2
+#head(test_set)
+modelsvm = svm( anesthesia.time ~gender +data.classs +surgeon+k.anesthesia+ anesthesia+age+ k.s+surgery.code, data = y)
+ 
+#Predict using SVM regression
+predYsvm = predict(modelsvm, data=test_set)
+
+RMSE(predYsvm,actual_test)
+
+```
+
+
+
+
+
+
+```{r}
+set.seed(5)
+
+indexes = createDataPartition(y$anesthesia.time, p = .8, list = F)
+train = y[indexes, ]
+test = y[-indexes, ]
+train_setx = data.matrix(train[, -7])
+train_sety = train[,7]
+
+test_setx = data.matrix(test[, -7])
+test_sety = test[, 7]
+xgb_train = xgb.DMatrix(data = train_setx, label = train_sety)
+xgb_test = xgb.DMatrix(data = test_setx, label = test_sety)
+
+#defining a watchlist
+watchlist = list(train=xgb_train, test=xgb_test)
+#fit XGBoost model and display training and testing data at each iteartion
+model = xgb.train(data = xgb_train, max_depth =1, eta = 1, verbose = 0, nthread = 2, watchlist=watchlist, nrounds = 0)
+#define final model
+xgbc = xgboost(data = xgb_train,max_depth = 1, eta = 1, nthread = 2, nrounds = 0,label=xgb_test)
+summary(xgbc)
+print(xgbc)
+#use model to make predictions on test data
+pred_y = predict(xgbc, xgb_test)
+RMSE(test_sety,pred_y )
+MAE(test_sety, pred_y)
+mse(test_sety, pred_y)
+
+
+x = 1:length(test_sety)
+plot(x, test_sety,main="spine surgery" ,col = "red", type = "l")
+lines(x, pred_y, col = "blue", type = "l")
+legend(x = 1, y = 38,  legend = c("original test_y", "predicted test_y"), 
+       col = c("red", "blue"), box.lty = 1, cex = 0.8, lty = c(1, 1))
+
+```
+
+
+
+
+
